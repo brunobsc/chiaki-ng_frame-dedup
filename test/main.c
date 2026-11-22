@@ -19,6 +19,7 @@ extern MunitTest tests_aia[];
 extern MunitTest tests_bitstream[];
 #if CHIAKI_LIB_ENABLE_FFMPEG_DECODER
 extern MunitTest tests_ffmpegdecoder[];
+extern MunitTest tests_framededup[];
 #endif
 
 static MunitSuite suites[] = {
@@ -112,6 +113,13 @@ static MunitSuite suites[] = {
 	{
 		"/ffmpegdecoder",
 		tests_ffmpegdecoder,
+		NULL,
+		1,
+		MUNIT_SUITE_OPTION_NONE
+	},
+	{
+		"/framededup",
+		tests_framededup,
 		NULL,
 		1,
 		MUNIT_SUITE_OPTION_NONE

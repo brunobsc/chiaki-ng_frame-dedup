@@ -29,7 +29,7 @@ if(NOT CHIAKI_LIB_ENABLE_MBEDTLS)
 endif()
 
 if(CHIAKI_ENABLE_FFMPEG_DECODER)
-	list(APPEND CHIAKI_UNIT_SOURCES ffmpegdecoder.c)
+	list(APPEND CHIAKI_UNIT_SOURCES ffmpegdecoder.c framededup.c)
 endif()
 
 add_executable(chiaki-unit ${CHIAKI_UNIT_SOURCES})

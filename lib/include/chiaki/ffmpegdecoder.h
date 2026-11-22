@@ -4,6 +4,7 @@
 #include <chiaki/config.h>
 #include <chiaki/log.h>
 #include <chiaki/thread.h>
+#include <chiaki/framededup.h>
 
 #include <stdint.h>
 
@@ -26,6 +27,7 @@ struct chiaki_ffmpeg_frame_t
 	double pts;
 	double duration;
 	bool recovered;
+	bool duplicate; // repeated picture (CHIAKI_DEDUP); do not present
 };
 
 struct chiaki_ffmpeg_decoder_t
@@ -50,6 +52,7 @@ struct chiaki_ffmpeg_decoder_t
 	double synthetic_candidate_duration_us;
 	uint64_t synthetic_last_sample_time_us;
 	uint8_t synthetic_candidate_count;
+	ChiakiFrameDedup dedup;
 };
 
 CHIAKI_EXPORT ChiakiErrorCode chiaki_ffmpeg_decoder_init(ChiakiFfmpegDecoder *decoder, ChiakiLog *log,

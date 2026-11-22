@@ -1,5 +1,8 @@
 
 #include <chiaki/ffmpegdecoder.h>
+
+#include <libavutil/hwcontext.h>
+#include <libavutil/pixfmt.h>
 #include <chiaki/time.h>
 #include <libavcodec/avcodec.h>
 #include <libavutil/pixdesc.h>
@@ -37,6 +40,10 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_ffmpeg_decoder_init(ChiakiFfmpegDecoder *de
 	decoder->frame_available_cb = frame_available_cb;
 	decoder->frame_available_cb_user = frame_available_cb_user;
 	decoder->hdr_enabled = codec == CHIAKI_CODEC_H265_HDR;
+	chiaki_frame_dedup_init(&decoder->dedup, codec != CHIAKI_CODEC_H264);
+	if(decoder->dedup.enabled)
+		CHIAKI_LOGI(log, "Repeated-frame removal enabled (ratio %.2f, min %zu bytes, max %u in a row)",
+			decoder->dedup.ratio, decoder->dedup.min_bytes, decoder->dedup.max_drop);
 	decoder->frames_lost = 0;
 	decoder->frame_recovered = false;
 	decoder->synthetic_packet_pts = 0;
@@ -127,6 +134,7 @@ CHIAKI_EXPORT void chiaki_ffmpeg_decoder_fini(ChiakiFfmpegDecoder *decoder)
 {
 	chiaki_mutex_lock(&decoder->mutex);
 	avcodec_free_context(&decoder->codec_context);
+	chiaki_frame_dedup_fini(&decoder->dedup);
 	if(decoder->hw_device_ctx)
 		av_buffer_unref(&decoder->hw_device_ctx);
 	chiaki_mutex_unlock(&decoder->mutex);
@@ -187,6 +195,19 @@ CHIAKI_EXPORT bool chiaki_ffmpeg_decoder_video_sample_cb(uint8_t *buf, size_t bu
 	if(frames_lost > 0)
 		decoder->synthetic_packet_pts += synthetic_duration_pts * (int64_t)frames_lost;
 
+	int dedup_decision = chiaki_frame_dedup_classify(&decoder->dedup, buf, buf_size, frames_lost, frame_recovered);
+	if(decoder->dedup.enabled)
+	{
+		chiaki_frame_dedup_tag(&decoder->dedup, decoder->synthetic_packet_pts, dedup_decision);
+		if(decoder->dedup.stat_in >= 600)
+		{
+			CHIAKI_LOGI(decoder->log, "Repeated-frame removal: %llu in, %llu hidden, %llu forced, median %zu bytes",
+				(unsigned long long)decoder->dedup.stat_in, (unsigned long long)decoder->dedup.stat_dropped,
+				(unsigned long long)decoder->dedup.stat_forced, chiaki_frame_dedup_median(&decoder->dedup));
+			decoder->dedup.stat_in = decoder->dedup.stat_dropped = decoder->dedup.stat_forced = 0;
+		}
+	}
+
 	AVPacket *packet = av_packet_alloc();
 	packet->data = buf;
 	packet->size = buf_size;
@@ -239,6 +260,51 @@ hell:
 	return false;
 }
 
+// Second dedup stage: look at the decoded picture. Hardware frames are copied
+// to system memory for the comparison only; the GPU frame is what gets shown.
+static bool dedup_check_picture(ChiakiFfmpegDecoder *decoder, AVFrame *frame, int decision)
+{
+	ChiakiFrameDedup *dedup = &decoder->dedup;
+	if(decision == CHIAKI_DEDUP_SAMPLE_REPEAT || dedup->pixel_threshold <= 0.0)
+		return chiaki_frame_dedup_resolve_without_picture(dedup, decision);
+
+	AVFrame *sw = frame;
+	AVFrame *tmp = NULL;
+	if(frame->hw_frames_ctx)
+	{
+		tmp = av_frame_alloc();
+		if(!tmp || av_hwframe_transfer_data(tmp, frame, 0) < 0)
+		{
+			av_frame_free(&tmp);
+			return chiaki_frame_dedup_resolve_without_picture(dedup, decision);
+		}
+		sw = tmp;
+	}
+
+	int bytes = 0, shift = 0;
+	switch(sw->format)
+	{
+		case AV_PIX_FMT_NV12:
+		case AV_PIX_FMT_YUV420P:
+		case AV_PIX_FMT_YUVJ420P:
+			bytes = 1; shift = 0; break;
+		case AV_PIX_FMT_P010LE:
+			bytes = 2; shift = 8; break;
+		case AV_PIX_FMT_YUV420P10LE:
+			bytes = 2; shift = 2; break;
+		default:
+			break;
+	}
+	bool repeat;
+	if(!bytes)
+		repeat = chiaki_frame_dedup_resolve_without_picture(dedup, decision);
+	else
+		repeat = chiaki_frame_dedup_picture(dedup, sw->data[0], sw->linesize[0], sw->width, sw->height,
+				bytes, shift, decision == CHIAKI_DEDUP_SAMPLE_CHECK);
+	av_frame_free(&tmp);
+	return repeat;
+}
+
 CHIAKI_EXPORT ChiakiFfmpegFrame chiaki_ffmpeg_decoder_pull_frame(ChiakiFfmpegDecoder *decoder, int32_t *frames_lost)
 {
 	chiaki_mutex_lock(&decoder->mutex);
@@ -281,14 +347,25 @@ CHIAKI_EXPORT ChiakiFfmpegFrame chiaki_ffmpeg_decoder_pull_frame(ChiakiFfmpegDec
 		frame->decode_error_flags |= 1;
 	}
 	decoder->frames_lost = 0;
+	int dedup_decision = CHIAKI_DEDUP_SAMPLE_SHOW;
+	if(frame && decoder->dedup.enabled && !recovered && *frames_lost == 0)
+	{
+		int64_t key = frame->pts != AV_NOPTS_VALUE ? frame->pts : frame->best_effort_timestamp;
+		dedup_decision = chiaki_frame_dedup_lookup(&decoder->dedup, key);
+	}
 	AVRational pkt_timebase = decoder->codec_context->pkt_timebase;
 	AVRational ctx_timebase = decoder->codec_context->time_base;
 	AVRational framerate = decoder->codec_context->framerate;
 	chiaki_mutex_unlock(&decoder->mutex);
 
+	bool duplicate = false;
+	if(frame && decoder->dedup.enabled)
+		duplicate = dedup_check_picture(decoder, frame, dedup_decision);
+
 	ChiakiFfmpegFrame frame_plus_stats = {};
 	frame_plus_stats.frame = frame;
 	frame_plus_stats.recovered = recovered;
+	frame_plus_stats.duplicate = duplicate;
 	if(frame)
 	{
 		chiaki_ffmpeg_frame_get_timing(
