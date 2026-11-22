@@ -51,7 +51,7 @@ CHIAKI_EXPORT void chiaki_frame_dedup_init(ChiakiFrameDedup *dedup, bool hevc)
 	long max_drop = env_long("CHIAKI_DEDUP_MAX_DROP", 3);
 	long min_bytes = env_long("CHIAKI_DEDUP_MIN_BYTES", 256);
 	chiaki_frame_dedup_init_with(dedup, hevc,
-			env_long("CHIAKI_DEDUP", 0) != 0,
+			env_long("CHIAKI_DEDUP", 1) != 0,
 			env_double("CHIAKI_DEDUP_RATIO", 0.10),
 			min_bytes > 0 ? (size_t)min_bytes : 0,
 			max_drop > 0 ? (unsigned int)max_drop : 3,

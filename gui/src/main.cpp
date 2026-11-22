@@ -117,6 +117,12 @@ int real_main(int argc, char *argv[])
 	qputenv("ANV_VIDEO_DECODE", "1");
 	qputenv("RADV_PERFTEST", "video_decode");
 #endif
+#if defined(Q_OS_LINUX)
+	// NVIDIA Smooth Motion (driver frame generation, RTX 40/50). Ignored by other
+	// drivers. Must be set before the Vulkan instance exists. Set it to 0 to opt out.
+	if(!qEnvironmentVariableIsSet("NVPRESENT_ENABLE_SMOOTH_MOTION"))
+		qputenv("NVPRESENT_ENABLE_SMOOTH_MOTION", "1");
+#endif
 #ifdef CHIAKI_GUI_ENABLE_STEAMDECK_NATIVE
 	if (qEnvironmentVariableIsSet("SteamDeck"))
 		qputenv("QT_IM_MODULE", "sdinput");

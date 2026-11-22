@@ -13,7 +13,7 @@
  * frames to interpolate between.
  *
  * Configured through environment variables, read once at init:
- *   CHIAKI_DEDUP=1             enable (default off)
+ *   CHIAKI_DEDUP=0             disable (default on)
  *   CHIAKI_DEDUP_RATIO=0.10    duplicate if size < ratio * median(real frames)
  *   CHIAKI_DEDUP_MIN_BYTES=256 always duplicate below this size
  *   CHIAKI_DEDUP_MAX_DROP=3    never drop more than this many in a row
