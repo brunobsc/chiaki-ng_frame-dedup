@@ -68,6 +68,8 @@ All options are environment variables:
 | `CHIAKI_DEDUP_MIN_BYTES` | `256` | Frames smaller than this are always repeats |
 | `CHIAKI_DEDUP_MAX_DROP` | `3` | Maximum frames hidden in a row |
 | `CHIAKI_DEDUP_DEBUG` | `0` | `1` prints every decision to stderr, for tuning |
+| `CHIAKI_DEARTIFACT` | slider | Artifact reduction amount `0`-`1`, overrides the setting |
+| `CHIAKI_SHARPEN` | slider | Sharpening amount `0`-`1`, overrides the setting |
 
 Examples:
 
@@ -80,6 +82,20 @@ CHIAKI_DEDUP_DEBUG=1 ./chiaki-ng.AppImage 2> dedup.log      # log decisions
 Every 600 frames the regular chiaki-ng log also gets a summary line
 (`Repeated-frame removal: N in, N hidden, N forced, median N bytes`).
 
+### Optional image enhancement
+
+Settings → Video has two extra sliders, both **Off by default**:
+
+- **Artifact Reduction**: a light edge-preserving filter that smooths compression noise (shimmer, mosquito
+  noise, faint blocking) while keeping edges.
+- **Sharpening**: contrast adaptive sharpening (after AMD FidelityFX CAS) at the stream's own resolution, so it
+  works even when the stream and the display are both 1080p.
+
+They run in that order, before any upscaler. Start around 30-50% and use artifact reduction together with
+sharpening on lower bitrates, otherwise sharpening also sharpens the compression noise. Raising the stream
+bitrate (Settings → Stream) improves the picture more than any filter. For quick comparisons,
+`CHIAKI_DEARTIFACT` and `CHIAKI_SHARPEN` (0-1) override the sliders.
+
 ### Building from source
 
 The change lives in `lib/src/framededup.c` (detection), `lib/src/ffmpegdecoder.c` (wiring) and
@@ -91,7 +107,8 @@ not build against it. Unit tests: `build/test/chiaki-unit`.
 
 Fork **não oficial** do chiaki-ng. Remove automaticamente os quadros repetidos que o PS5 envia quando o jogo
 roda abaixo de 60 fps, para que a geração de quadros (NVIDIA Smooth Motion) trabalhe só com quadros reais.
-Remoção e Smooth Motion vêm ligados por padrão. Use stream a 60 fps, decodificador **vulkan** e
+Remoção e Smooth Motion vêm ligados por padrão. Em Settings → Video há ainda **Artifact Reduction** e
+**Sharpening** (redução de artefatos e nitidez), opcionais e desligados por padrão. Use stream a 60 fps, decodificador **vulkan** e
 **Frame Mixer: None**. O Smooth Motion precisa de RTX 40/50 e driver NVIDIA 580.82.07 ou mais novo. Baixe o
 AppImage em [Releases](../../releases). Para desligar: `CHIAKI_DEDUP=0` e/ou `NVPRESENT_ENABLE_SMOOTH_MOTION=0`.
 

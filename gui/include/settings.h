@@ -519,6 +519,11 @@ class Settings : public QObject
 
 		PlaceboFrameMixer GetPlaceboFrameMixer() const;
 		bool GetDirectFrameMapping() const { return settings.value("settings/direct_frame_mapping", true).toBool(); }
+		// Optional image enhancement at the stream's own resolution (0 = off, the default)
+		float GetEnhanceSharpen() const { return settings.value("settings/enhance_sharpen", 0.0).toFloat(); }
+		void SetEnhanceSharpen(float amount) { settings.setValue("settings/enhance_sharpen", amount); }
+		float GetEnhanceDeartifact() const { return settings.value("settings/enhance_deartifact", 0.0).toFloat(); }
+		void SetEnhanceDeartifact(float amount) { settings.setValue("settings/enhance_deartifact", amount); }
 		void SetDirectFrameMapping(bool enabled) { settings.setValue("settings/direct_frame_mapping", enabled); }
 		void SetPlaceboFrameMixer(PlaceboFrameMixer frame_mixer);
 

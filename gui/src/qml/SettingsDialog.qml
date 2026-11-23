@@ -953,6 +953,64 @@ DialogView {
 
                     Label {
                         Layout.alignment: Qt.AlignRight
+                        text: qsTr("Artifact Reduction:")
+                    }
+
+                    C.Slider {
+                        id: enhanceDeartifactSlider
+                        Layout.preferredWidth: 300
+                        from: 0
+                        to: 1
+                        stepSize: 0.05
+                        value: Chiaki.settings.enhanceDeartifact
+                        onMoved: Chiaki.settings.enhanceDeartifact = value
+
+                        Label {
+                            anchors {
+                                left: parent.right
+                                verticalCenter: parent.verticalCenter
+                                leftMargin: 10
+                            }
+                            text: parent.value > 0 ? qsTr("%1%").arg((parent.value * 100).toFixed(0)) : qsTr("Off")
+                        }
+                    }
+
+                    Label {
+                        Layout.alignment: Qt.AlignRight
+                        text: qsTr("(Off)")
+                    }
+
+                    Label {
+                        Layout.alignment: Qt.AlignRight
+                        text: qsTr("Sharpening:")
+                    }
+
+                    C.Slider {
+                        id: enhanceSharpenSlider
+                        Layout.preferredWidth: 300
+                        from: 0
+                        to: 1
+                        stepSize: 0.05
+                        value: Chiaki.settings.enhanceSharpen
+                        onMoved: Chiaki.settings.enhanceSharpen = value
+
+                        Label {
+                            anchors {
+                                left: parent.right
+                                verticalCenter: parent.verticalCenter
+                                leftMargin: 10
+                            }
+                            text: parent.value > 0 ? qsTr("%1%").arg((parent.value * 100).toFixed(0)) : qsTr("Off")
+                        }
+                    }
+
+                    Label {
+                        Layout.alignment: Qt.AlignRight
+                        text: qsTr("(Off)")
+                    }
+
+                    Label {
+                        Layout.alignment: Qt.AlignRight
                         text: qsTr("Frame Delivery:")
                     }
 

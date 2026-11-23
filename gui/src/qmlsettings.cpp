@@ -981,6 +981,34 @@ bool QmlSettings::directFrameMapping() const
     return settings->GetDirectFrameMapping();
 }
 
+float QmlSettings::enhanceSharpen() const
+{
+    return settings->GetEnhanceSharpen();
+}
+
+void QmlSettings::setEnhanceSharpen(float amount)
+{
+    amount = qBound(0.0f, amount, 1.0f);
+    if (qFuzzyCompare(1.0f + amount, 1.0f + settings->GetEnhanceSharpen()))
+        return;
+    settings->SetEnhanceSharpen(amount);
+    emit enhanceSharpenChanged();
+}
+
+float QmlSettings::enhanceDeartifact() const
+{
+    return settings->GetEnhanceDeartifact();
+}
+
+void QmlSettings::setEnhanceDeartifact(float amount)
+{
+    amount = qBound(0.0f, amount, 1.0f);
+    if (qFuzzyCompare(1.0f + amount, 1.0f + settings->GetEnhanceDeartifact()))
+        return;
+    settings->SetEnhanceDeartifact(amount);
+    emit enhanceDeartifactChanged();
+}
+
 void QmlSettings::setDirectFrameMapping(bool enabled)
 {
     if (enabled == settings->GetDirectFrameMapping())

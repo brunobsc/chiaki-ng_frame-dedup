@@ -2437,6 +2437,31 @@ static const struct pl_hook *load_mpv_hook(pl_gpu gpu, const QString &path)
     return hook;
 }
 
+// Optional enhancement amount: the setting, unless an environment variable
+// (CHIAKI_SHARPEN / CHIAKI_DEARTIFACT, 0..1) overrides it for quick testing.
+static float enhancement_amount(const char *env_name, float setting)
+{
+    float amount = setting;
+    if (qEnvironmentVariableIsSet(env_name)) {
+        bool ok = false;
+        const float env_amount = qEnvironmentVariable(env_name).toFloat(&ok);
+        if (ok)
+            amount = env_amount;
+    }
+    return qBound(0.0f, amount, 1.0f);
+}
+
+static void set_hook_float_param(const struct pl_hook *hook, const char *name, float value)
+{
+    if (!hook)
+        return;
+    for (int i = 0; i < hook->num_parameters; i++) {
+        const struct pl_hook_par &par = hook->parameters[i];
+        if (par.type == PL_VAR_FLOAT && par.data && qstrcmp(par.name, name) == 0)
+            par.data->f = value;
+    }
+}
+
 static bool uses_fsrcnnx(PlaceboUpscaler upscaler)
 {
     return upscaler == PlaceboUpscaler::FSRCNNX8 || upscaler == PlaceboUpscaler::FSRCNNX16;
@@ -2682,6 +2707,8 @@ QmlMainWindow::~QmlMainWindow()
     // User shader hooks hold a reference to the GPU (their descriptors destroy
     // buffers/textures via p->gpu), so they must be released before the GPU is.
     pl_mpv_user_shader_destroy(&fsr_hook);
+    pl_mpv_user_shader_destroy(&cas_hook);
+    pl_mpv_user_shader_destroy(&deartifact_hook);
     pl_mpv_user_shader_destroy(&fsrcnnx_hook_8);
     pl_mpv_user_shader_destroy(&fsrcnnx_hook_16);
     if (render_backend == RenderBackend::Vulkan) {
@@ -5326,6 +5353,8 @@ renderer_backend_ready:
     pl_options_reset(this->renderparams_opts, &pl_render_high_quality_params);
     this->renderparams_changed = true;
     this->fsr_hook = load_mpv_hook(placeboGpu(), QStringLiteral(":/shaders/FSR.glsl"));
+    this->cas_hook = load_mpv_hook(placeboGpu(), QStringLiteral(":/shaders/CAS.glsl"));
+    this->deartifact_hook = load_mpv_hook(placeboGpu(), QStringLiteral(":/shaders/Deartifact.glsl"));
     this->fsrcnnx_hook_8 = load_mpv_hook(placeboGpu(), QStringLiteral(":/shaders/FSRCNNX_x2_8-0-4-1.glsl"));
     this->fsrcnnx_hook_16 = load_mpv_hook(placeboGpu(), QStringLiteral(":/shaders/FSRCNNX_x2_16-0-4-1.glsl"));
 
@@ -7539,10 +7568,27 @@ void QmlMainWindow::render()
                                                fsr_hook, fsrcnnx_hook_8, fsrcnnx_hook_16);
         }
     }
-    const struct pl_hook *active_hooks[] = {fsrcnnx_hook};
-    if (fsrcnnx_hook) {
+    // Optional enhancement (off by default) runs first, on the stream's own
+    // resolution: artifact reduction, then sharpening, then any upscaler.
+    const float deartifact_amount = enhancement_amount("CHIAKI_DEARTIFACT", settings->GetEnhanceDeartifact());
+    const float sharpen_amount = enhancement_amount("CHIAKI_SHARPEN", settings->GetEnhanceSharpen());
+    const struct pl_hook *active_hooks[3] = {};
+    int num_active_hooks = 0;
+    if (deartifact_hook && deartifact_amount > 0.0f) {
+        set_hook_float_param(deartifact_hook, "strength", deartifact_amount);
+        active_hooks[num_active_hooks++] = deartifact_hook;
+    }
+    if (cas_hook && sharpen_amount > 0.0f) {
+        set_hook_float_param(cas_hook, "sharpness", sharpen_amount);
+        active_hooks[num_active_hooks++] = cas_hook;
+    }
+    if (fsrcnnx_hook)
+        active_hooks[num_active_hooks++] = fsrcnnx_hook;
+    if (num_active_hooks > 0) {
         params.hooks = active_hooks;
-        params.num_hooks = 1;
+        params.num_hooks = num_active_hooks;
+    }
+    if (fsrcnnx_hook) {
         switch (video_preset) {
         case VideoPreset::HighQualitySpatial:
             if (fsrcnnx_hook == fsr_hook)
